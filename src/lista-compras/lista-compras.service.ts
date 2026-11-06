@@ -457,12 +457,6 @@ export class ListaComprasService {
       const frequencia = mesesDistintos.size
       if (frequencia < 2) continue
 
-      const quantidadeTotal = itens.reduce(
-        (sum, i) => sum + i.produto.quantidade,
-        0,
-      )
-      const mediaQuantidade = Math.ceil(quantidadeTotal / frequencia)
-
       const itensOrdenados = [...itens].sort(
         (a, b) => b.dataEmissao.getTime() - a.dataEmissao.getTime(),
       )
@@ -471,8 +465,17 @@ export class ListaComprasService {
         maisRecente.valorUnitario ||
         maisRecente.valorTotal / maisRecente.quantidade
 
+      const isKg = (maisRecente.unidade || '').trim().toUpperCase() === 'KG'
+      const quantidadeTotal = itens.reduce(
+        (sum, i) => sum + i.produto.quantidade,
+        0,
+      )
+      const mediaQuantidade = isKg
+        ? Number((quantidadeTotal / frequencia).toFixed(3))
+        : Math.ceil(quantidadeTotal / frequencia)
+
       const nomeExibicao = apelidoMap.get(nomeChave) || maisRecente.nome
-      const valorEstimado = mediaQuantidade * valorUnitarioRecente
+      const valorEstimado = Number((mediaQuantidade * valorUnitarioRecente).toFixed(2))
 
       itensFiltrados.push({
         nome: nomeExibicao,
@@ -483,6 +486,7 @@ export class ListaComprasService {
         estabelecimentoOrigem: null,
         quantidade: mediaQuantidade,
         unidade: maisRecente.unidade,
+        pesoEstimadoKg: isKg ? mediaQuantidade : undefined,
         valorEstimado,
         valorUnitarioRecente,
         frequencia,

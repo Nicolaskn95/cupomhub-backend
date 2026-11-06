@@ -37,6 +37,9 @@ export class ItemLista {
   @Prop({ required: true })
   unidade: string
 
+  @Prop({ type: Number, required: false })
+  pesoEstimadoKg?: number
+
   @Prop({ required: true })
   valorEstimado: number
 

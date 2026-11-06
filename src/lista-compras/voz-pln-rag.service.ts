@@ -33,10 +33,36 @@ export interface ItemVinculadoRag {
   estabelecimentoOrigem: string | null
   quantidade: number
   unidade: string
+  pesoEstimadoKg?: number
   valorUnitarioRecente: number
   valorEstimado: number
   frequencia: number
   comprado: boolean
+}
+
+export const PESO_MEDIO_UNIDADE_KG: Record<string, number> = {
+  tomate: 0.15,
+  cebola: 0.15,
+  batata: 0.2,
+  cenoura: 0.15,
+  banana: 0.12,
+  maca: 0.18,
+  laranja: 0.2,
+  limao: 0.08,
+  alho: 0.05,
+  pimentao: 0.15,
+  abobrinha: 0.25,
+  berinjela: 0.3,
+  pepino: 0.2,
+  manga: 0.35,
+  abacate: 0.4,
+  mamao: 0.5,
+  melancia: 3.0,
+  melao: 1.5,
+  chuchu: 0.25,
+  mandioquinha: 0.1,
+  mandioca: 0.4,
+  pera: 0.18,
 }
 
 const NUMEROS_EXTENSO: Record<string, number> = {
@@ -772,6 +798,19 @@ export class VozPlnRagService {
    * 1. Retrieval: Recupera os melhores candidatos do histórico do mercado selecionado (e outros mercados como fallback) para cada item falado.
    * 2. Generation/Matching: Consulta a Gemini API com os candidatos recuperados (ou usa o matcher determinístico de alta precisão) para decidir qual produto do mercado corresponde ao item falado.
    */
+  estimarPesoUnitarioKg(termoFalado: string, nomeOriginal?: string): number {
+    const texto = removerAcentos(
+      `${termoFalado} ${nomeOriginal || ''}`.toLowerCase(),
+    ).replace(/[^a-z0-9]/g, '')
+
+    for (const [chave, peso] of Object.entries(PESO_MEDIO_UNIDADE_KG)) {
+      if (texto.includes(chave)) {
+        return peso
+      }
+    }
+    return 0.2 // Fallback: 200g por unidade de produto pesavel
+  }
+
   async vincularItensComHistorico(
     itensFalados: ItemExtraidoPln[],
     candidatosHistorico: CandidatoHistoricoMercado[],
@@ -895,9 +934,38 @@ Regras:
 
       if (escolhido) {
         const valorUnitario = escolhido.valorUnitarioRecente || 0
-        const valorEstimado = Number(
-          (item.quantidade * valorUnitario).toFixed(2),
-        )
+        const unidadeMercado = (escolhido.unidade || '').toUpperCase().trim()
+        const unidadeItem = (item.unidade || '').toUpperCase().trim()
+
+        let valorEstimado = 0
+        let pesoEstimadoKg: number | undefined
+
+        // Se o produto no mercado é vendido por KG (hortifrúti, verduras, carnes pesáveis)
+        if (unidadeMercado === 'KG') {
+          if (unidadeItem === 'KG') {
+            valorEstimado = Number((item.quantidade * valorUnitario).toFixed(2))
+            pesoEstimadoKg = item.quantidade
+          } else if (unidadeItem === 'G' || unidadeItem === 'GR') {
+            const pesoKg = item.quantidade / 1000
+            valorEstimado = Number((pesoKg * valorUnitario).toFixed(2))
+            pesoEstimadoKg = pesoKg
+          } else {
+            // Unidade ou contagem de peças (ex: 3 tomates, 2 cebolas)
+            // Em vez de calcular por unidade (multiplicando pelo preço do kg inteiro),
+            // calcula pelo peso estimado em kg do produto
+            const pesoUnitarioKg = this.estimarPesoUnitarioKg(
+              item.termoFalado,
+              escolhido.nomeOriginal,
+            )
+            const pesoTotalKg = Number(
+              (item.quantidade * pesoUnitarioKg).toFixed(3),
+            )
+            valorEstimado = Number((pesoTotalKg * valorUnitario).toFixed(2))
+            pesoEstimadoKg = pesoTotalKg
+          }
+        } else {
+          valorEstimado = Number((item.quantidade * valorUnitario).toFixed(2))
+        }
 
         return {
           nome: item.termoFalado,
@@ -912,6 +980,7 @@ Regras:
             : escolhido.estabelecimento,
           quantidade: item.quantidade,
           unidade: item.unidade || escolhido.unidade || 'UN',
+          pesoEstimadoKg,
           valorUnitarioRecente: valorUnitario,
           valorEstimado,
           frequencia: escolhido.frequencia,
