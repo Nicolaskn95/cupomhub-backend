@@ -11,6 +11,10 @@ import {
   EstabelecimentoItemStats,
   PrecoMesStats,
 } from './interfaces/historico-compra.interface'
+import {
+  gerarChaveCanonica,
+  sanitizarDescricaoProduto,
+} from '../produto-catalogo/utils/sanitizar-produto.util'
 
 @Injectable()
 export class HistoricoCompraService {
@@ -20,8 +24,9 @@ export class HistoricoCompraService {
   ) {}
 
   /**
-   * Retorna os produtos agrupados pelo catálogo global (ou chave canônica),
-   * calculando estatísticas agregadas (total gasto, frequência, histórico de preços por mercado e mensal).
+   * Retorna os produtos agrupados pelo catálogo global ou pela chave canônica inteligente,
+   * unificando variações fiscais (ex: "Musculo" vs "Musc") e códigos de barra (cEAN),
+   * associando o nome correto de cada estabelecimento/mercado e calculando estatísticas agregadas.
    */
   async listarProdutosAgrupados(
     usuarioId: string,
@@ -52,7 +57,21 @@ export class HistoricoCompraService {
       { $match: matchStage },
       {
         $lookup: {
-          from: 'notas_fiscais',
+          from: 'estabelecimentos',
+          localField: 'mercadoId',
+          foreignField: '_id',
+          as: 'mercado',
+        },
+      },
+      {
+        $unwind: {
+          path: '$mercado',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $lookup: {
+          from: 'notafiscals',
           localField: 'notaFiscalId',
           foreignField: '_id',
           as: 'nota',
@@ -94,8 +113,15 @@ export class HistoricoCompraService {
       },
       {
         $group: {
-          _id: { $ifNull: ['$produtoCatalogoId', '$descricaoBrutaNota'] },
+          _id: {
+            $ifNull: [
+              '$catalogo.chaveCanonica',
+              { $ifNull: ['$produtoCatalogoId', '$descricaoBrutaNota'] },
+            ],
+          },
           produtoCatalogoId: { $first: '$produtoCatalogoId' },
+          chaveCanonica: { $first: '$catalogo.chaveCanonica' },
+          codigoInternoMercado: { $first: '$codigoInternoMercado' },
           nomePadronizado: { $first: '$catalogo.nomePadronizado' },
           categoria: { $first: '$categoria' },
           nomes: { $addToSet: '$descricaoBrutaNota' },
@@ -110,8 +136,18 @@ export class HistoricoCompraService {
               dataCompra: '$dataCompra',
               estabelecimento: {
                 $ifNull: [
-                  '$nota.estabelecimentoOriginal',
-                  { $ifNull: ['$nota.estabelecimento', 'Supermercado'] },
+                  '$mercado.nomeDepara',
+                  {
+                    $ifNull: [
+                      '$mercado.nomeOriginal',
+                      {
+                        $ifNull: [
+                          '$nota.estabelecimentoOriginal',
+                          { $ifNull: ['$nota.estabelecimento', 'Supermercado'] },
+                        ],
+                      },
+                    ],
+                  },
                 ],
               },
             },
@@ -120,9 +156,77 @@ export class HistoricoCompraService {
       },
     ]
 
-    const grupos = await this.historicoCompraModel.aggregate(pipeline).exec()
+    const gruposDb = await this.historicoCompraModel.aggregate(pipeline).exec()
 
-    const resultado: ProdutoAgrupadoResponse[] = grupos.map((g) => {
+    // Pós-processamento inteligente: unifica grupos que tenham a mesma chave canônica ou código de barras
+    // Ex: "Musculo" e "Musc" geram CANON_MUSCULO e são agrupados no mesmo card e gráfico
+    const mapaUnificado = new Map<
+      string,
+      {
+        id: string
+        nomePadronizado: string | null
+        categoria: any
+        nomes: Set<string>
+        totalGasto: number
+        totalQuantidade: number
+        vezesComprado: number
+        itens: Array<{
+          precoUnitario: number
+          precoTotal: number
+          quantidade: number
+          dataCompra: Date
+          estabelecimento: string
+        }>
+      }
+    >()
+
+    for (const g of gruposDb) {
+      const primeiroNome = Array.isArray(g.nomes) && g.nomes.length > 0 ? g.nomes[0] : ''
+      const textoParaChave = g.nomePadronizado || primeiroNome || String(g._id)
+      const chave =
+        g.chaveCanonica ||
+        (g.produtoCatalogoId && !String(g._id).includes(' ') && !String(g._id).startsWith('CANON_')
+          ? String(g.produtoCatalogoId)
+          : gerarChaveCanonica(g.codigoInternoMercado, textoParaChave))
+
+      let unificado = mapaUnificado.get(chave)
+      if (!unificado) {
+        unificado = {
+          id: g.produtoCatalogoId ? String(g.produtoCatalogoId) : String(g._id),
+          nomePadronizado: g.nomePadronizado || null,
+          categoria: g.categoria || null,
+          nomes: new Set<string>(),
+          totalGasto: 0,
+          totalQuantidade: 0,
+          vezesComprado: 0,
+          itens: [],
+        }
+        mapaUnificado.set(chave, unificado)
+      }
+
+      if (g.nomePadronizado && !unificado.nomePadronizado) {
+        unificado.nomePadronizado = g.nomePadronizado
+      }
+      if (g.categoria && !unificado.categoria) {
+        unificado.categoria = g.categoria
+      }
+      if (Array.isArray(g.nomes)) {
+        g.nomes.forEach((n: string) => {
+          if (n) unificado!.nomes.add(n)
+        })
+      }
+      unificado.totalGasto += g.totalGasto || 0
+      unificado.totalQuantidade += g.totalQuantidade || 0
+      unificado.vezesComprado += g.vezesComprado || 0
+
+      if (Array.isArray(g.itens)) {
+        unificado.itens.push(...g.itens)
+      }
+    }
+
+    const resultado: ProdutoAgrupadoResponse[] = Array.from(
+      mapaUnificado.values(),
+    ).map((g) => {
       const itensOrdenados = [...(g.itens || [])].sort(
         (a, b) =>
           new Date(b.dataCompra).getTime() - new Date(a.dataCompra).getTime(),
@@ -141,7 +245,7 @@ export class HistoricoCompraService {
       const variacao =
         mediaPreco > 0 ? ((ultimoPreco - mediaPreco) / mediaPreco) * 100 : null
 
-      // Agrupamento por estabelecimento
+      // Agrupamento por estabelecimento real do histórico (nome amigável / de-para ou nome original da nota)
       const estabelecimentos: Record<string, EstabelecimentoItemStats> = {}
       for (const item of itensOrdenados) {
         const estabKey = item.estabelecimento || 'Supermercado'
@@ -168,8 +272,17 @@ export class HistoricoCompraService {
         precosPorMes[mesKey].count += 1
       }
 
+      const nomesList = Array.from(g.nomes)
+      const nomeMaisDescritivo = nomesList.reduce((melhor, atual) => {
+        const limpo = sanitizarDescricaoProduto(atual)
+        return limpo.length > melhor.length ? limpo : melhor
+      }, '')
+
       const nomePrincipal =
-        g.nomePadronizado || g.nomes[0] || 'Produto sem nome'
+        g.nomePadronizado ||
+        nomeMaisDescritivo ||
+        nomesList[0] ||
+        'Produto sem nome'
 
       const compras = itensOrdenados.map((item) => ({
         dataCompra: item.dataCompra
@@ -182,9 +295,9 @@ export class HistoricoCompraService {
       }))
 
       return {
-        id: String(g._id),
+        id: g.id,
         nome: nomePrincipal,
-        nomes: g.nomes && g.nomes.length > 0 ? g.nomes : [nomePrincipal],
+        nomes: nomesList.length > 0 ? nomesList : [nomePrincipal],
         totalGasto,
         totalQuantidade,
         vezesComprado: g.vezesComprado,
@@ -236,43 +349,45 @@ export class HistoricoCompraService {
     dataLimite.setDate(dataLimite.getDate() - 30)
 
     const resultado =
-      await this.historicoCompraModel.aggregate<EstatisticasPrecoProduto>([
-        {
-          $match: {
-            produtoCatalogoId: targetObjectId,
-            dataCompra: { $gte: dataLimite },
+      await this.historicoCompraModel
+        .aggregate<EstatisticasPrecoProduto>([
+          {
+            $match: {
+              produtoCatalogoId: targetObjectId,
+              dataCompra: { $gte: dataLimite },
+            },
           },
-        },
-        {
-          $group: {
-            _id: '$produtoCatalogoId',
-            precoMinimo: { $min: '$precoUnitario' },
-            precoMaximo: { $max: '$precoUnitario' },
-            precoMedio: { $avg: '$precoUnitario' },
-            totalRegistros: { $sum: 1 },
-            dataMaisRecente: { $max: '$dataCompra' },
+          {
+            $group: {
+              _id: '$produtoCatalogoId',
+              precoMinimo: { $min: '$precoUnitario' },
+              precoMaximo: { $max: '$precoUnitario' },
+              precoMedio: { $avg: '$precoUnitario' },
+              totalRegistros: { $sum: 1 },
+              dataMaisRecente: { $max: '$dataCompra' },
+            },
           },
-        },
-        {
-          $sort: {
-            dataMaisRecente: -1,
+          {
+            $sort: {
+              dataMaisRecente: -1,
+            },
           },
-        },
-        {
-          $project: {
-            _id: 0,
-            produtoCatalogoId: { $toString: '$_id' },
-            precoMinimo: { $round: ['$precoMinimo', 2] },
-            precoMaximo: { $round: ['$precoMaximo', 2] },
-            precoMedio: { $round: ['$precoMedio', 2] },
-            totalRegistros: 1,
-            dataMaisRecente: 1,
-            periodoDias: { $literal: 30 },
+          {
+            $project: {
+              _id: 0,
+              produtoCatalogoId: { $toString: '$_id' },
+              precoMinimo: { $round: ['$precoMinimo', 2] },
+              precoMaximo: { $round: ['$precoMaximo', 2] },
+              precoMedio: { $round: ['$precoMedio', 2] },
+              totalRegistros: 1,
+              dataMaisRecente: 1,
+              periodoDias: { $literal: 30 },
+            },
           },
-        },
-      ])
+        ])
+        .exec()
 
-    return resultado.length > 0 ? resultado[0] : null
+    return resultado && resultado.length > 0 ? resultado[0] : null
   }
 
   /**

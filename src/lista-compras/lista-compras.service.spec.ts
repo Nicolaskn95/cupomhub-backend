@@ -172,4 +172,51 @@ describe('ListaComprasService', () => {
       expect(result).toEqual({ success: true })
     })
   })
+
+  describe('calcularItensRecorrentesMercado', () => {
+    it('deve calcular quantidade decimal para produtos com unidade KG sem arredondar com Math.ceil', async () => {
+      mockProdutoApelidoModel.find.mockResolvedValue([])
+      const notas = [
+        {
+          dataEmissao: new Date('2026-01-10'),
+          produtos: [
+            {
+              nome: 'TOMATE ITALIANO KG',
+              quantidade: 0.45,
+              unidade: 'KG',
+              valorUnitario: 8.0,
+              valorTotal: 3.6,
+            },
+          ],
+        },
+        {
+          dataEmissao: new Date('2026-02-15'),
+          produtos: [
+            {
+              nome: 'TOMATE ITALIANO KG',
+              quantidade: 0.55,
+              unidade: 'KG',
+              valorUnitario: 8.0,
+              valorTotal: 4.4,
+            },
+          ],
+        },
+      ]
+
+      mockNotaFiscalModel.find.mockReturnValue({
+        populate: jest.fn().mockResolvedValue(notas),
+      })
+
+      const resultado = await service.calcularItensRecorrentesMercado(
+        validUserId,
+        '12345678000199',
+        3,
+      )
+      expect(resultado).toHaveLength(1)
+      expect(resultado[0].unidade).toBe('KG')
+      expect(resultado[0].quantidade).toBe(0.5)
+      expect(resultado[0].pesoEstimadoKg).toBe(0.5)
+      expect(resultado[0].valorEstimado).toBe(4.0)
+    })
+  })
 })

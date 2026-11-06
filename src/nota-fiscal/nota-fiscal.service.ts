@@ -69,37 +69,46 @@ export class NotaFiscalService {
       throw new BadRequestException('URL de nota fiscal inválida');
     }
 
-    const job = await this.notaFiscalQueue.add(
-      'processar-url',
-      { url, userId },
-      {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 3000,
-        },
-        removeOnComplete: true,
-        removeOnFail: 100,
-      },
-    );
-
-    this.logger.log(`Job #${job.id} enfileirado para processar nota fiscal`);
-
-    const redisOptions = getRedisConnectionOptions(this.configService);
-    const queueEvents = new QueueEvents('nota-fiscal-queue', {
-      connection: redisOptions,
-    });
-
     try {
-      const result = await job.waitUntilFinished(queueEvents, 30000);
-      return result as NotaFiscal;
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Falha ao processar nota fiscal em fila';
-      this.logger.error(`Erro ao aguardar job #${job.id}: ${message}`);
-      throw new BadRequestException(message);
-    } finally {
-      await queueEvents.close().catch(() => {});
+      const job = await this.notaFiscalQueue.add(
+        'processar-url',
+        { url, userId },
+        {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 3000,
+          },
+          removeOnComplete: true,
+          removeOnFail: 100,
+        },
+      );
+
+      this.logger.log(`Job #${job.id} enfileirado para processar nota fiscal`);
+
+      const redisOptions = getRedisConnectionOptions(this.configService);
+      const queueEvents = new QueueEvents('nota-fiscal-queue', {
+        connection: redisOptions,
+      });
+
+      try {
+        const result = await job.waitUntilFinished(queueEvents, 30000);
+        return result as NotaFiscal;
+      } catch (waitError) {
+        const message = waitError instanceof Error ? waitError.message : String(waitError);
+        this.logger.warn(
+          `Job #${job.id} não finalizou na fila ou falhou (${message}). Executando fallback direto...`,
+        );
+        return await this.processarUrl(url, userId);
+      } finally {
+        await queueEvents.close().catch(() => {});
+      }
+    } catch (queueAddError) {
+      const message = queueAddError instanceof Error ? queueAddError.message : String(queueAddError);
+      this.logger.warn(
+        `Fila Redis indisponível (${message}). Executando processamento síncrono direto...`,
+      );
+      return await this.processarUrl(url, userId);
     }
   }
 

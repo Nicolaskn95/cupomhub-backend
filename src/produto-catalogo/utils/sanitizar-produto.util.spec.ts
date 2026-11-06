@@ -3,6 +3,7 @@ import {
   isEanValido,
   gerarChaveCanonica,
   removerAcentos,
+  expandirAbreviacoesFiscais,
 } from './sanitizar-produto.util'
 
 describe('sanitizar-produto.util', () => {
@@ -128,11 +129,27 @@ describe('sanitizar-produto.util', () => {
       expect(chaveMercadoB).toBe('CANON_BANANA_NANICA')
       expect(chaveMercadoC).toBe('CANON_BANANA_NANICA')
     })
+
+    it('deve unificar abreviações fiscais como Musculo no mercado X e Musc no mercado Y', () => {
+      const chaveMercadoX = gerarChaveCanonica(null, '1.006 KG - MUSCULO')
+      const chaveMercadoY = gerarChaveCanonica(null, 'MUSC')
+      const chaveMercadoZ = gerarChaveCanonica('9999', 'CARNE MUSC')
+
+      expect(chaveMercadoX).toBe('CANON_MUSCULO')
+      expect(chaveMercadoY).toBe('CANON_MUSCULO')
+      expect(chaveMercadoZ).toBe('CANON_CARNE_MUSCULO')
+    })
   })
 
-  describe('removerAcentos', () => {
+  describe('removerAcentos e expandirAbreviacoesFiscais', () => {
     it('deve remover acentuação corretamente', () => {
       expect(removerAcentos('AÇÚCAR MAÇÃ CAFÉ PÃO')).toBe('ACUCAR MACA CAFE PAO')
+    })
+
+    it('deve expandir termos abreviados da SEFAZ', () => {
+      expect(expandirAbreviacoesFiscais('MUSC')).toBe('MUSCULO')
+      expect(expandirAbreviacoesFiscais('MAC PEN')).toBe('MACARRAO PENNE')
+      expect(expandirAbreviacoesFiscais('TOM CARMEM')).toBe('TOMATE CARMEM')
     })
   })
 })
