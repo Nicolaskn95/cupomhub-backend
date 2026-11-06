@@ -25,7 +25,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "migrar:catalogo": "ts-node -r tsconfig-paths/register src/scripts/migrar-para-catalogo.ts",
     "migrar:historico": "ts-node -r tsconfig-paths/register src/scripts/migrar-para-historico-compras.ts",
-    "migrar:mercados": "ts-node -r tsconfig-paths/register src/scripts/migrar-mercados-antigos.ts"
+    "migrar:mercados": "ts-node -r tsconfig-paths/register src/scripts/migrar-mercados-antigos.ts",
+    "start:worker": "node dist/worker"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.5",
