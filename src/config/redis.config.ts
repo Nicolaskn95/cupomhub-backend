@@ -4,11 +4,12 @@ import { ConnectionOptions } from 'bullmq'
 export function getRedisConnectionOptions(
   configService: ConfigService,
 ): ConnectionOptions {
-  const redisUrl =
+  let redisUrl =
     configService.get<string>('REDIS_URL') ||
     configService.get<string>('REDIS_PUBLIC_URL')
 
-  if (redisUrl) {
+  // Se o Railway injetar a string literal com erro de interpolação ${{...}}, desconsidera
+  if (redisUrl && !redisUrl.startsWith('${{')) {
     try {
       const parsed = new URL(redisUrl)
       return {
@@ -24,11 +25,7 @@ export function getRedisConnectionOptions(
         maxRetriesPerRequest: null,
       }
     } catch {
-      return {
-        host: 'localhost',
-        port: 6379,
-        maxRetriesPerRequest: null,
-      }
+      // Ignora erro de parsing e tenta variáveis diretas
     }
   }
 

@@ -22,12 +22,20 @@ import { getRedisConnectionOptions } from './config/redis.config'
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        uri: configService.get<string>(
-          'MONGODB_URI',
-          'mongodb://localhost:27017/deOlhoNaNota',
-        ),
-      }),
+      useFactory: (configService: ConfigService) => {
+        const mongoUri = configService.get<string>('MONGO_URI')
+        const mongodbUri = configService.get<string>('MONGODB_URI')
+
+        let uri = mongoUri || mongodbUri || 'mongodb://localhost:27017/deOlhoNaNota'
+        // Se MONGODB_URI for localhost mas MONGO_URI for Atlas, prioriza Atlas
+        if (mongodbUri && !mongodbUri.includes('localhost')) {
+          uri = mongodbUri
+        } else if (mongoUri) {
+          uri = mongoUri
+        }
+
+        return { uri }
+      },
     }),
     BullModule.forRootAsync({
       imports: [ConfigModule],
