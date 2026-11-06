@@ -1,7 +1,15 @@
-import { IsString, MinLength } from 'class-validator'
+import { IsOptional, IsString } from 'class-validator'
 
 export class AdicionarVozDto {
+  @IsOptional()
   @IsString()
-  @MinLength(1)
-  textoFalado: string
+  textoFalado?: string
+
+  @IsOptional()
+  @IsString()
+  audioBase64?: string
+
+  @IsOptional()
+  @IsString()
+  mimeType?: string
 }

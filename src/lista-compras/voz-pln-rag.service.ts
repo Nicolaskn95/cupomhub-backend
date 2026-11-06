@@ -191,16 +191,17 @@ export class VozPlnRagService {
     return (
       this.configService.get<string>('GEMINI_MODEL') ||
       process.env.GEMINI_MODEL ||
-      'gemini-3.8-flash'
+      'gemini-3.5-flash-lite'
     ).trim()
   }
 
   /**
-   * Chama a Gemini Interactions API (v1beta/interactions) com suporte a JSON Schema estruturado.
+   * Chama a Gemini Interactions API (v1beta/interactions) com suporte a JSON Schema estruturado e entrada de texto ou multimodal (áudio).
+   * Possui fallback automático entre gemini-3.5-flash-lite e gemini-3.1-flash-lite caso ocorra limite de taxa (429).
    */
   private async chamarGeminiJson<T>(
     systemInstruction: string,
-    promptText: string,
+    promptInput: string | Array<Record<string, any>>,
     jsonSchema: Record<string, any>,
   ): Promise<T | null> {
     const apiKey = this.getGeminiApiKey()
@@ -208,65 +209,165 @@ export class VozPlnRagService {
       return null
     }
 
-    const model = this.getGeminiModel()
+    const modeloPreferido = this.getGeminiModel()
+    const modelosTentativa = Array.from(
+      new Set([
+        modeloPreferido,
+        'gemini-3.5-flash-lite',
+        'gemini-3.1-flash-lite',
+      ]),
+    )
 
-    try {
-      const response = await axios.post(
-        'https://generativelanguage.googleapis.com/v1beta/interactions',
-        {
-          model,
-          system_instruction: systemInstruction,
-          input: promptText,
-          store: false,
-          response_format: {
-            type: 'text',
-            mime_type: 'application/json',
-            schema: jsonSchema,
+    for (const model of modelosTentativa) {
+      try {
+        const response = await axios.post(
+          'https://generativelanguage.googleapis.com/v1beta/interactions',
+          {
+            model,
+            system_instruction: systemInstruction,
+            input: promptInput,
+            store: false,
+            response_format: {
+              type: 'text',
+              mime_type: 'application/json',
+              schema: jsonSchema,
+            },
           },
-        },
-        {
-          headers: {
-            'x-goog-api-key': apiKey,
-            'Content-Type': 'application/json',
+          {
+            headers: {
+              'x-goog-api-key': apiKey,
+              'Content-Type': 'application/json',
+            },
+            timeout: 20000,
           },
-          timeout: 15000,
-        },
-      )
+        )
 
-      const data = response.data
-      let rawText: string | null = data?.output_text || null
+        const data = response.data
+        let rawText: string | null = data?.output_text || null
 
-      if (!rawText && Array.isArray(data?.steps)) {
-        for (let i = data.steps.length - 1; i >= 0; i--) {
-          const step = data.steps[i]
-          if (step?.type === 'model_output' && Array.isArray(step.content)) {
-            const textPart = step.content.find(
-              (c: any) => c?.type === 'text' && typeof c.text === 'string',
-            )
-            if (textPart) {
-              rawText = textPart.text
-              break
+        if (!rawText && Array.isArray(data?.steps)) {
+          for (let i = data.steps.length - 1; i >= 0; i--) {
+            const step = data.steps[i]
+            if (step?.type === 'model_output' && Array.isArray(step.content)) {
+              const textPart = step.content.find(
+                (c: any) => c?.type === 'text' && typeof c.text === 'string',
+              )
+              if (textPart) {
+                rawText = textPart.text
+                break
+              }
             }
           }
         }
+
+        if (!rawText) {
+          continue
+        }
+
+        const cleaned = rawText
+          .replace(/```json/gi, '')
+          .replace(/```/g, '')
+          .trim()
+
+        return JSON.parse(cleaned) as T
+      } catch (err: any) {
+        this.logger.warn(
+          `Aviso ao consultar modelo ${model} na Gemini API (${err?.message}). Tentando próximo fallback...`,
+        )
       }
-
-      if (!rawText) {
-        return null
-      }
-
-      const cleaned = rawText
-        .replace(/```json/gi, '')
-        .replace(/```/g, '')
-        .trim()
-
-      return JSON.parse(cleaned) as T
-    } catch (err: any) {
-      this.logger.warn(
-        `Aviso ao consultar Gemini Interactions API (${err?.message}). Utilizando motor PLN/RAG determinístico local.`,
-      )
-      return null
     }
+
+    return null
+  }
+
+  /**
+   * Transcreve áudio gravado no dispositivo (ex: iPhone Safari / PWA MediaRecorder) e extrai os itens via PLN usando Gemini.
+   */
+  async extrairItensDeAudioBase64(
+    audioBase64: string,
+    mimeType = 'audio/mp4',
+  ): Promise<{ textoTranscrito: string; itens: ItemExtraidoPln[] }> {
+    const base64Limpo = (audioBase64 || '')
+      .replace(/^data:audio\/[^;]+;base64,/i, '')
+      .trim()
+
+    if (!base64Limpo) {
+      return { textoTranscrito: '', itens: [] }
+    }
+
+    const mimeNormalizado = (mimeType || 'audio/mp4')
+      .split(';')[0]
+      .trim()
+      .toLowerCase()
+
+    const schema = {
+      type: 'object',
+      properties: {
+        textoTranscrito: { type: 'string' },
+        itens: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              termoFalado: { type: 'string' },
+              quantidade: { type: 'number' },
+              unidade: { type: 'string' },
+            },
+            required: ['termoFalado', 'quantidade', 'unidade'],
+          },
+        },
+      },
+      required: ['textoTranscrito', 'itens'],
+    }
+
+    const systemPrompt =
+      'Você é um especialista em PLN e reconhecimento de voz em português brasileiro para listas de compras de supermercado. Transcreva fielmente o áudio enviado pelo usuário em "textoTranscrito" e extraia todos os produtos mencionados em "itens" com suas quantidades e unidades padronizadas (UN, KG, G, L, ML, PCT, CX, LATA, BJ, FD, DZ). Remova verbos de comando como "adicionar", "colocar", "comprar".'
+
+    const inputMultimodal = [
+      {
+        type: 'text',
+        text: 'Transcreva este áudio de lista de compras em português e extraia os itens estruturados.',
+      },
+      {
+        type: 'audio',
+        data: base64Limpo,
+        mime_type: mimeNormalizado,
+      },
+    ]
+
+    const respostaIa = await this.chamarGeminiJson<{
+      textoTranscrito: string
+      itens: ItemExtraidoPln[]
+    }>(systemPrompt, inputMultimodal, schema)
+
+    if (respostaIa) {
+      const itensValidos = Array.isArray(respostaIa.itens)
+        ? respostaIa.itens
+            .map((item) => ({
+              termoFalado: this.formatarTermoFalado(item.termoFalado || ''),
+              quantidade:
+                Number(item.quantidade) > 0 ? Number(item.quantidade) : 1,
+              unidade: this.normalizarUnidade(item.unidade),
+            }))
+            .filter((i) => i.termoFalado.length >= 2)
+        : []
+
+      if (itensValidos.length > 0) {
+        return {
+          textoTranscrito: respostaIa.textoTranscrito || '',
+          itens: itensValidos,
+        }
+      }
+
+      if (respostaIa.textoTranscrito) {
+        return {
+          textoTranscrito: respostaIa.textoTranscrito,
+          itens: this.extrairItensDeterministico(respostaIa.textoTranscrito),
+        }
+      }
+    }
+
+    return { textoTranscrito: '', itens: [] }
   }
 
   /**
