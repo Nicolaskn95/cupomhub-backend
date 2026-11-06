@@ -22,6 +22,7 @@ import { AtualizarRascunhoDto } from './dto/atualizar-rascunho.dto'
 import { ProcessarRagDto } from './dto/processar-rag.dto'
 import {
   CandidatoHistoricoMercado,
+  ItemExtraidoPln,
   VozPlnRagService,
 } from './voz-pln-rag.service'
 import { removerAcentos } from '../produto-catalogo/utils/sanitizar-produto.util'
@@ -107,9 +108,21 @@ export class ListaComprasService {
       throw new BadRequestException('Serviço de voz/PLN não disponível.')
     }
 
-    const extraidos = await this.vozPlnRagService.extrairItensDeComandoVoz(
-      dto.textoFalado,
-    )
+    let extraidos: ItemExtraidoPln[] = []
+    let textoTranscrito = dto.textoFalado || ''
+
+    if (dto.audioBase64) {
+      const resAudio = await this.vozPlnRagService.extrairItensDeAudioBase64(
+        dto.audioBase64,
+        dto.mimeType,
+      )
+      extraidos = resAudio.itens
+      textoTranscrito = resAudio.textoTranscrito
+    } else if (dto.textoFalado) {
+      extraidos = await this.vozPlnRagService.extrairItensDeComandoVoz(
+        dto.textoFalado,
+      )
+    }
 
     if (extraidos.length === 0) {
       throw new BadRequestException(
@@ -158,6 +171,7 @@ export class ListaComprasService {
     return {
       rascunho: atualizado,
       itensExtraidos: extraidos,
+      textoTranscrito,
     }
   }
 
@@ -638,9 +652,18 @@ export class ListaComprasService {
       throw new NotFoundException('Lista ativa não encontrada.')
     }
 
-    const extraidos = await this.vozPlnRagService.extrairItensDeComandoVoz(
-      dto.textoFalado,
-    )
+    let extraidos: ItemExtraidoPln[] = []
+    if (dto.audioBase64) {
+      const resAudio = await this.vozPlnRagService.extrairItensDeAudioBase64(
+        dto.audioBase64,
+        dto.mimeType,
+      )
+      extraidos = resAudio.itens
+    } else if (dto.textoFalado) {
+      extraidos = await this.vozPlnRagService.extrairItensDeComandoVoz(
+        dto.textoFalado,
+      )
+    }
     if (extraidos.length === 0) {
       throw new BadRequestException(
         'Não foi possível identificar produtos no comando de voz informado.',
