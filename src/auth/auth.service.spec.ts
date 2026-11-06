@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing'
 import { getModelToken } from '@nestjs/mongoose'
 import { JwtService } from '@nestjs/jwt'
-import { ConflictException, UnauthorizedException } from '@nestjs/common'
+import { ConflictException, UnauthorizedException, BadRequestException } from '@nestjs/common'
 import * as bcrypt from 'bcrypt'
 import { AuthService } from './auth.service'
 import { User } from './schemas/user.schema'
@@ -47,7 +47,7 @@ describe('AuthService', () => {
   })
 
   describe('register', () => {
-    it('should throw ConflictException if user already exists', async () => {
+    it('should throw ConflictException if user already exists by username', async () => {
       mockUserModel.findOne.mockReturnValue({
         lean: jest.fn().mockResolvedValue({ _id: '123', username: 'existinguser' }),
       })
@@ -57,7 +57,50 @@ describe('AuthService', () => {
       ).rejects.toThrow(ConflictException)
     })
 
-    it('should successfully register a new user', async () => {
+    it('should throw ConflictException if user already exists by email', async () => {
+      mockUserModel.findOne.mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ _id: '123', email: 'user@example.com' }),
+      })
+
+      await expect(
+        service.register({ email: 'user@example.com', password: 'password123' }),
+      ).rejects.toThrow(ConflictException)
+    })
+
+    it('should throw BadRequestException if neither email nor username is provided', async () => {
+      await expect(
+        service.register({ password: 'password123' } as any),
+      ).rejects.toThrow(BadRequestException)
+    })
+
+    it('should successfully register a new user with email only', async () => {
+      mockUserModel.findOne.mockReturnValue({
+        lean: jest.fn().mockResolvedValue(null),
+      })
+      ;(bcrypt.hash as jest.Mock).mockResolvedValue('hashedPassword')
+      mockUserModel.create.mockResolvedValue({
+        _id: { toString: () => 'mock-id' },
+        username: 'novousuario',
+        email: 'novousuario@exemplo.com',
+      })
+
+      const result = await service.register({
+        email: 'novousuario@exemplo.com',
+        password: 'password123',
+      })
+
+      expect(mockUserModel.findOne).toHaveBeenCalledWith({
+        $or: [{ email: 'novousuario@exemplo.com' }, { username: 'novousuario@exemplo.com' }],
+      })
+      expect(bcrypt.hash).toHaveBeenCalledWith('password123', 10)
+      expect(result).toEqual({
+        id: 'mock-id',
+        username: 'novousuario',
+        email: 'novousuario@exemplo.com',
+      })
+    })
+
+    it('should successfully register a new user with username', async () => {
       mockUserModel.findOne.mockReturnValue({
         lean: jest.fn().mockResolvedValue(null),
       })
@@ -72,7 +115,9 @@ describe('AuthService', () => {
         password: 'password123',
       })
 
-      expect(mockUserModel.findOne).toHaveBeenCalledWith({ username: 'newuser' })
+      expect(mockUserModel.findOne).toHaveBeenCalledWith({
+        $or: [{ username: 'newuser' }, { email: 'newuser' }],
+      })
       expect(bcrypt.hash).toHaveBeenCalledWith('password123', 10)
       expect(result).toEqual({
         id: 'mock-id',
@@ -107,11 +152,12 @@ describe('AuthService', () => {
       ).rejects.toThrow(UnauthorizedException)
     })
 
-    it('should return accessToken, expiresIn, and user info on valid credentials', async () => {
+    it('should return accessToken, expiresIn, and user info on valid credentials with username or email', async () => {
       mockUserModel.findOne.mockReturnValue({
         select: jest.fn().mockResolvedValue({
           _id: { toString: () => 'user-id' },
           username: 'validuser',
+          email: 'validuser@example.com',
           passwordHash: 'hashed',
         }),
       })
@@ -119,14 +165,17 @@ describe('AuthService', () => {
       mockJwtService.signAsync.mockResolvedValue('signed-jwt-token')
 
       const result = await service.login({
-        username: 'validuser',
+        username: 'validuser@example.com',
         password: 'correctpassword',
       })
 
+      expect(mockUserModel.findOne).toHaveBeenCalledWith({
+        $or: [{ username: 'validuser@example.com' }, { email: 'validuser@example.com' }],
+      })
       expect(result).toEqual({
         accessToken: 'signed-jwt-token',
         expiresIn: '1d',
-        user: { id: 'user-id', username: 'validuser' },
+        user: { id: 'user-id', username: 'validuser', email: 'validuser@example.com' },
       })
     })
 

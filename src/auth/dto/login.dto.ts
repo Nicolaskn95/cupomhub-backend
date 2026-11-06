@@ -12,7 +12,7 @@ export class LoginDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(3)
-  @MaxLength(32)
+  @MaxLength(128)
   username: string
 
   @IsString()

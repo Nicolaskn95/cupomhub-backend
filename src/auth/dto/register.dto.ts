@@ -1,20 +1,23 @@
 import {
+  IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsString,
-  MinLength,
   MaxLength,
-  Matches,
+  MinLength,
 } from 'class-validator'
 
 export class RegisterDto {
+  @IsOptional()
+  @IsEmail({}, { message: 'Formato de e-mail inválido' })
+  @MaxLength(128)
+  email?: string
+
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MinLength(3)
-  @MaxLength(32)
-  @Matches(/^[a-z0-9_]+$/i, {
-    message: 'username must contain only letters, numbers and underscore',
-  })
-  username: string
+  @MaxLength(128)
+  username?: string
 
   @IsString()
   @IsNotEmpty()
