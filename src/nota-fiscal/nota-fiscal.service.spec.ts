@@ -1,12 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing'
 import { getModelToken } from '@nestjs/mongoose'
+import { getQueueToken } from '@nestjs/bullmq'
+import { ConfigService } from '@nestjs/config'
 import { BadRequestException } from '@nestjs/common'
 import { Types } from 'mongoose'
 import { NotaFiscalService } from './nota-fiscal.service'
 import { NotaFiscal } from './schemas/nota-fiscal.schema'
 import { Produto } from './schemas/produto.schema'
 import { EstabelecimentoUsuario } from './schemas/estabelecimento-usuario.schema'
-import { CaptchaSolverService } from './captcha-solver.service'
 import { MercadoService } from '../mercado/mercado.service'
 
 describe('NotaFiscalService', () => {
@@ -14,8 +15,9 @@ describe('NotaFiscalService', () => {
   let mockNotaFiscalModel: any
   let mockProdutoModel: any
   let mockEstabelecimentoUsuarioModel: any
-  let mockCaptchaSolverService: any
   let mockMercadoService: any
+  let mockQueue: any
+  let mockConfigService: any
 
   const validUserId = new Types.ObjectId().toString()
   const validNotaId = new Types.ObjectId().toString()
@@ -41,16 +43,20 @@ describe('NotaFiscalService', () => {
       findOneAndUpdate: jest.fn(),
     }
 
-    mockCaptchaSolverService = {
-      resolverCaptcha: jest.fn(),
-    }
-
     mockMercadoService = {
       processarUpsertMercado: jest.fn().mockResolvedValue({
         _id: new Types.ObjectId(),
       }),
       buscarPorCnpj: jest.fn(),
       buscarPorId: jest.fn(),
+    }
+
+    mockQueue = {
+      add: jest.fn(),
+    }
+
+    mockConfigService = {
+      get: jest.fn().mockReturnValue(undefined),
     }
 
     const module: TestingModule = await Test.createTestingModule({
@@ -69,8 +75,12 @@ describe('NotaFiscalService', () => {
           useValue: mockEstabelecimentoUsuarioModel,
         },
         {
-          provide: CaptchaSolverService,
-          useValue: mockCaptchaSolverService,
+          provide: getQueueToken('nota-fiscal-queue'),
+          useValue: mockQueue,
+        },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
         },
         {
           provide: MercadoService,

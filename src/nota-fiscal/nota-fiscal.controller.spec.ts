@@ -8,6 +8,7 @@ describe('NotaFiscalController', () => {
 
   beforeEach(async () => {
     service = {
+      enfileirarProcessamento: jest.fn(),
       processarUrl: jest.fn(),
       processarChaveAcesso: jest.fn(),
       listarNotasPorUsuario: jest.fn(),
@@ -36,11 +37,11 @@ describe('NotaFiscalController', () => {
     expect(controller).toBeDefined()
   })
 
-  it('should call processarUrl', async () => {
+  it('should call enfileirarProcessamento', async () => {
     const dto = { url: 'https://example.com' }
-    service.processarUrl.mockResolvedValue({ id: 'nf-1' })
+    service.enfileirarProcessamento.mockResolvedValue({ id: 'nf-1' })
     const result = await controller.processar(dto, 'user-1')
-    expect(service.processarUrl).toHaveBeenCalledWith(dto.url, 'user-1')
+    expect(service.enfileirarProcessamento).toHaveBeenCalledWith(dto.url, 'user-1')
     expect(result).toEqual({ id: 'nf-1' })
   })
 

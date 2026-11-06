@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { ConfigModule, ConfigService } from '@nestjs/config'
 import { MongooseModule } from '@nestjs/mongoose'
+import { BullModule } from '@nestjs/bullmq'
 import { AppController } from './app.controller'
 import { AppService } from './app.service'
 import { NotaFiscalModule } from './nota-fiscal/nota-fiscal.module'
@@ -11,6 +12,7 @@ import { ListaComprasModule } from './lista-compras/lista-compras.module'
 import { MercadoModule } from './mercado/mercado.module'
 import { ProdutoCatalogoModule } from './produto-catalogo/produto-catalogo.module'
 import { HistoricoCompraModule } from './historico-compra/historico-compra.module'
+import { getRedisConnectionOptions } from './config/redis.config'
 
 @Module({
   imports: [
@@ -25,6 +27,13 @@ import { HistoricoCompraModule } from './historico-compra/historico-compra.modul
           'MONGODB_URI',
           'mongodb://localhost:27017/deOlhoNaNota',
         ),
+      }),
+    }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        connection: getRedisConnectionOptions(configService),
       }),
     }),
     MercadoModule,

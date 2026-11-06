@@ -23,7 +23,7 @@ export class NotaFiscalController {
   @Post('processar')
   @UseGuards(JwtAuthGuard)
   async processar(@Body() dto: ProcessarNotaDto, @UserId() userId: string) {
-    return this.notaFiscalService.processarUrl(dto.url, userId)
+    return this.notaFiscalService.enfileirarProcessamento(dto.url, userId)
   }
 
   @Post('processar-chave')
