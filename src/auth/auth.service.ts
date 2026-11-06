@@ -27,12 +27,69 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    const username = dto.username.trim().toLowerCase()
-    const existing = await this.userModel.findOne({ username }).lean()
-    if (existing) {
-      throw new ConflictException('Username already in use')
-    }
+    const rawEmail =
+      dto.email || (dto.username?.includes('@') ? dto.username : undefined)
+
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS)
+
+    if (rawEmail) {
+      const cleanEmail = rawEmail.trim().toLowerCase()
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        throw new BadRequestException('Formato de e-mail inválido')
+      }
+
+      const existing = await this.userModel
+        .findOne({
+          $or: [{ email: cleanEmail }, { username: cleanEmail }],
+        })
+        .lean()
+      if (existing) {
+        throw new ConflictException('E-mail já está em uso')
+      }
+
+      let baseUsername =
+        dto.username && !dto.username.includes('@')
+          ? dto.username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '')
+          : cleanEmail.split('@')[0].replace(/[^a-z0-9_]/g, '')
+
+      if (baseUsername.length < 3) {
+        baseUsername = `user_${Math.random().toString(36).substring(2, 8)}`
+      }
+
+      let username = baseUsername
+      let count = 1
+      while (await this.userModel.findOne({ username }).lean()) {
+        username = `${baseUsername}_${count}`
+        count++
+      }
+
+      const user = await this.userModel.create({
+        username,
+        email: cleanEmail,
+        passwordHash,
+      })
+
+      return {
+        id: user._id.toString(),
+        username: user.username,
+        email: user.email,
+      }
+    }
+
+    if (!dto.username) {
+      throw new BadRequestException('E-mail ou nome de usuário é obrigatório')
+    }
+
+    const username = dto.username.trim().toLowerCase()
+    const existing = await this.userModel
+      .findOne({
+        $or: [{ username }, { email: username }],
+      })
+      .lean()
+    if (existing) {
+      throw new ConflictException('Nome de usuário já está em uso')
+    }
+
     const user = await this.userModel.create({ username, passwordHash })
     return {
       id: user._id.toString(),
@@ -41,9 +98,11 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const username = dto.username.trim().toLowerCase()
+    const identifier = dto.username.trim().toLowerCase()
     const user = await this.userModel
-      .findOne({ username })
+      .findOne({
+        $or: [{ username: identifier }, { email: identifier }],
+      })
       .select('+passwordHash')
     if (!user || !user.passwordHash) {
       throw new UnauthorizedException('Invalid credentials')
@@ -61,7 +120,11 @@ export class AuthService {
     return {
       accessToken,
       expiresIn,
-      user: { id: user._id.toString(), username: user.username },
+      user: {
+        id: user._id.toString(),
+        username: user.username,
+        email: user.email,
+      },
     }
   }
 
