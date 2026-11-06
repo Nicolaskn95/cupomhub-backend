@@ -1,7 +1,7 @@
 {
-  "name": "de-olho-na-nota-backend",
+  "name": "cupomhub-backend",
   "version": "0.0.1",
-  "description": "Backend for De Olho na Nota - NFC-e scanner",
+  "description": "Backend for CupomHub - NFC-e scanner",
   "author": "",
   "private": true,
   "license": "UNLICENSED",

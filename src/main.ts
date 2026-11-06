@@ -10,7 +10,7 @@ async function bootstrap() {
   app.use(urlencoded({ extended: true, limit: '15mb' }))
 
   app.enableCors({
-    origin: process.env.CORS_ORIGIN?.split(',') || [
+    origin: process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()) || [
       'http://localhost:5173',
       'http://localhost:3000',
       'http://192.168.15.7:5173',

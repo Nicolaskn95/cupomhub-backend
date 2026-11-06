@@ -142,8 +142,8 @@ Instruções:
           headers: {
             Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://de-olho-na-nota.local',
-            'X-Title': 'De Olho na Nota - Duracao Media',
+            'HTTP-Referer': 'https://cupomhub.local',
+            'X-Title': 'CupomHub - Duracao Media',
           },
           timeout: 25000,
         },
@@ -332,8 +332,8 @@ Instruções:
           headers: {
             Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://de-olho-na-nota.local',
-            'X-Title': 'De Olho na Nota - Classificacao IA',
+            'HTTP-Referer': 'https://cupomhub.local',
+            'X-Title': 'CupomHub - Classificacao IA',
           },
           timeout: 25000,
         },
