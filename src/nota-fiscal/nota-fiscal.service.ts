@@ -476,12 +476,65 @@ export class NotaFiscalService {
 
   private extrairProdutos($: cheerio.Root): ProdutoExtraido[] {
     const produtos: ProdutoExtraido[] = []
+    const codigosIncluidos = new Set<string>()
+
+    // 1. Tenta extração estruturada via seletores do portal da SEFAZ (ex: SP / padrão nacional)
+    $('tr[id^="Item +"]').each((_, tr) => {
+      const el = $(tr)
+      const nomeEl = el.find('span.txtTit').first()
+      const nomeRaw = nomeEl.text()
+      if (!nomeRaw) return
+
+      const rcodText = el.find('.RCod').text()
+      const codMatch =
+        rcodText.match(/\(C[óo]digo:\s*([A-Z0-9]+)\s*\)/i) ||
+        rcodText.match(/([A-Z0-9]+)/i)
+      const codigo = codMatch ? codMatch[1].trim() : ''
+      if (!codigo || codigosIncluidos.has(codigo)) return
+      codigosIncluidos.add(codigo)
+
+      const rqtdText = el.find('.Rqtd').text()
+      const qtdMatch = rqtdText.match(/Qtde\.?:\s*([\d.,]+)/i)
+      const quantidade = qtdMatch
+        ? parseFloat(qtdMatch[1].replace(',', '.'))
+        : 1
+
+      const runText = el.find('.RUN').text()
+      const unMatch = runText.match(/UN:\s*(\w+)/i)
+      const unidade = unMatch ? unMatch[1].trim() : 'UN'
+
+      const rvlUnitText = el.find('.RvlUnit').text()
+      const vlUnitMatch = rvlUnitText.match(/Vl\.\s*Unit\.:\s*([\d.,]+)/i)
+      const valorUnitario = vlUnitMatch
+        ? parseFloat(vlUnitMatch[1].replace(',', '.'))
+        : 0
+
+      const valorText = el.find('.valor').text()
+      const vlTotMatch = valorText.match(/([\d.,]+)/)
+      const valorTotal = vlTotMatch
+        ? parseFloat(vlTotMatch[1].replace(',', '.'))
+        : valorUnitario * quantidade
+
+      produtos.push({
+        nome: normalizarNomeProduto(nomeRaw),
+        codigo,
+        quantidade,
+        unidade,
+        valorUnitario,
+        valorTotal,
+      })
+    })
+
+    if (produtos.length > 0) {
+      return produtos
+    }
+
+    // 2. Fallback via regex no texto do body (outros layouts de NFC-e)
     const texto = $('body').text().replace(/\s+/g, ' ')
 
     const regexProduto =
-      /([A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇ][A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇ\s\d/.]+?)\s*\(Código:\s*([A-Z0-9]+)\s*\)\s*Qtde\.?:\s*([\d.,]+)\s*UN:\s*(\w+)\s*Vl\. Unit\.:\s*([\d.,]+)\s*Vl\. Total\s*([\d.,]+)/gi
+      /([A-Z0-9ÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇ][A-Z0-9ÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇ\s\d/.\-%&+*#]+?)\s*\(Código:\s*([A-Z0-9]+)\s*\)\s*Qtde\.?:\s*([\d.,]+)\s*UN:\s*(\w+)\s*Vl\. Unit\.:\s*([\d.,]+)\s*Vl\. Total\s*([\d.,]+)/gi
 
-    const codigosIncluidos = new Set<string>()
     for (const match of texto.matchAll(regexProduto)) {
       const codigo = match[2]
       if (codigosIncluidos.has(codigo)) continue

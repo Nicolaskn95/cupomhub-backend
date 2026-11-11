@@ -206,5 +206,53 @@ describe('NotaFiscalService', () => {
       expect(dados.tipoPagamento).toBe('Cartão de Crédito')
       expect(dados.cartaoUsado).toBe('Mastercard')
     })
+
+    it('should correctly extract products with hyphens and special characters via SEFAZ table', () => {
+      const html = `
+        <html>
+          <body>
+            <tr id="Item + 1">
+              <td valign="top">
+                <span class="txtTit">F INF NAN COMF 0-6M</span>
+                <span class="RCod">(Código: 81057)</span>
+                <br>
+                <span class="Rqtd"><strong>Qtde.:</strong>1</span>
+                <span class="RUN"><strong>UN: </strong>LT</span>
+                <span class="RvlUnit"><strong>Vl. Unit.:</strong> 71,78</span>
+              </td>
+              <td align="right" valign="top" class="txtTit noWrap">
+                Vl. Total<br><span class="valor">71,78</span>
+              </td>
+            </tr>
+          </body>
+        </html>
+      `
+      const dados = (service as any).extrairDados(html)
+      expect(dados.produtos).toHaveLength(1)
+      expect(dados.produtos[0].nome).toBe('F INF NAN COMF 0-6M')
+      expect(dados.produtos[0].codigo).toBe('81057')
+      expect(dados.produtos[0].quantidade).toBe(1)
+      expect(dados.produtos[0].unidade).toBe('LT')
+      expect(dados.produtos[0].valorUnitario).toBe(71.78)
+      expect(dados.produtos[0].valorTotal).toBe(71.78)
+    })
+
+    it('should correctly extract products with hyphens via fallback regex when table is absent', () => {
+      const html = `
+        <html>
+          <body>
+            <div>F INF NAN COMF 0-6M (Código: 81057) Qtde.: 1 UN: LT Vl. Unit.: 71,78 Vl. Total 71,78</div>
+          </body>
+        </html>
+      `
+      const dados = (service as any).extrairDados(html)
+      expect(dados.produtos).toHaveLength(1)
+      expect(dados.produtos[0].nome).toBe('F INF NAN COMF 0-6M')
+      expect(dados.produtos[0].codigo).toBe('81057')
+      expect(dados.produtos[0].quantidade).toBe(1)
+      expect(dados.produtos[0].unidade).toBe('LT')
+      expect(dados.produtos[0].valorUnitario).toBe(71.78)
+      expect(dados.produtos[0].valorTotal).toBe(71.78)
+    })
   })
 })
