@@ -12,6 +12,7 @@ import { RascunhoListaCompras } from './schemas/rascunho-lista.schema'
 import { NotaFiscal } from '../nota-fiscal/schemas/nota-fiscal.schema'
 import { Produto } from '../nota-fiscal/schemas/produto.schema'
 import { EstabelecimentoUsuario } from '../nota-fiscal/schemas/estabelecimento-usuario.schema'
+import { Prefixo } from '../categoria/schemas/prefixo-categoria.schema'
 import { GerarListaDto } from './dto/gerar-lista.dto'
 import { MarcarItemDto } from './dto/marcar-item.dto'
 import { AdicionarItemDto } from './dto/adicionar-item.dto'
@@ -21,7 +22,9 @@ import { AdicionarVozDto } from './dto/adicionar-voz.dto'
 import { AtualizarRascunhoDto } from './dto/atualizar-rascunho.dto'
 import { ProcessarRagDto } from './dto/processar-rag.dto'
 import {
+  CATALOGO_CATEGORIAS_SUPERMERCADO,
   CandidatoHistoricoMercado,
+  CategoriaItemInfo,
   ItemExtraidoPln,
   VozPlnRagService,
 } from './voz-pln-rag.service'
@@ -44,10 +47,66 @@ export class ListaComprasService {
     private readonly rascunhoListaModel?: Model<RascunhoListaCompras>,
     @Optional()
     private readonly vozPlnRagService?: VozPlnRagService,
+    @Optional()
+    @InjectModel(Prefixo.name)
+    private readonly prefixoModel?: Model<Prefixo>,
   ) {}
 
   private userFilter(userId: string) {
     return { $or: [{ userId: new Types.ObjectId(userId) }, { userId }] }
+  }
+
+  private async carregarPrefixosOrdenadosUsuario(
+    userId: string,
+  ): Promise<any[]> {
+    if (!this.prefixoModel) return []
+    try {
+      const prefixos = await this.prefixoModel
+        .find(this.userFilter(userId))
+        .populate('categoria')
+      return [...(prefixos || [])].sort(
+        (a, b) => (b.prefixo?.length || 0) - (a.prefixo?.length || 0),
+      )
+    } catch {
+      return []
+    }
+  }
+
+  private resolverCategoriaItem(
+    nomeOriginal: string,
+    termoFalado: string | null | undefined,
+    prefixosOrdenados: any[] = [],
+  ): CategoriaItemInfo {
+    const nomesParaChecar = [nomeOriginal, termoFalado]
+      .filter((n): n is string => Boolean(n && n.trim()))
+      .map((n) => n.toUpperCase().trim())
+
+    for (const nomeUpper of nomesParaChecar) {
+      for (const p of prefixosOrdenados) {
+        const prefUpper = (p.prefixo || '').toUpperCase().trim()
+        if (prefUpper && nomeUpper.startsWith(prefUpper) && p.categoria) {
+          const cat = p.categoria as any
+          if (cat.codigo && cat.nome) {
+            const padrao = CATALOGO_CATEGORIAS_SUPERMERCADO[cat.codigo]
+            return {
+              categoriaCodigo: cat.codigo,
+              categoriaNome: cat.nome,
+              categoriaCor: cat.cor || padrao?.categoriaCor || '#6d28d9',
+              categoriaIcone: cat.icone || padrao?.categoriaIcone || 'Package',
+            }
+          }
+        }
+      }
+    }
+
+    if (this.vozPlnRagService) {
+      return this.vozPlnRagService.classificarCategoriaItem(
+        termoFalado,
+        nomeOriginal,
+      )
+    }
+
+    return CATALOGO_CATEGORIAS_SUPERMERCADO.MERCEARIA_SECA
   }
 
   async listarMercadosComHistorico(userId: string) {
@@ -215,19 +274,20 @@ export class ListaComprasService {
     candidatos: CandidatoHistoricoMercado[]
     nomeEstabelecimentoSelecionado: string
   }> {
-    const todasNotas = await this.notaFiscalModel
-      .find(this.userFilter(userId))
-      .populate({ path: 'produtos', model: Produto.name })
+    const [todasNotas, estabelecimentosUsuarios, apelidos, prefixosOrdenados] =
+      await Promise.all([
+        this.notaFiscalModel
+          .find(this.userFilter(userId))
+          .populate({ path: 'produtos', model: Produto.name }),
+        this.estabelecimentoUsuarioModel.find(this.userFilter(userId)),
+        this.produtoApelidoModel.find(this.userFilter(userId)),
+        this.carregarPrefixosOrdenadosUsuario(userId),
+      ])
 
-    const estabelecimentosUsuarios =
-      await this.estabelecimentoUsuarioModel.find(this.userFilter(userId))
     const deParaMap = new Map(
       estabelecimentosUsuarios.map((eu) => [eu.cnpj, eu.nomeDepara]),
     )
 
-    const apelidos = await this.produtoApelidoModel.find(
-      this.userFilter(userId),
-    )
     const apelidoMap = new Map(
       apelidos.map((a) => [a.nomeOriginal.toUpperCase().trim(), a.apelido]),
     )
@@ -295,6 +355,11 @@ export class ListaComprasService {
         0
 
       const apelido = apelidoMap.get(chave) || null
+      const catInfo = this.resolverCategoriaItem(
+        prod.nome,
+        apelido,
+        prefixosOrdenados,
+      )
 
       return {
         nomeOriginal: prod.nome,
@@ -306,6 +371,10 @@ export class ListaComprasService {
         noMercadoSelecionado,
         estabelecimento: maisRecente.estabelecimento,
         ultimaCompra: new Date(maisRecente.dataEmissao),
+        categoriaCodigo: catInfo.categoriaCodigo,
+        categoriaNome: catInfo.categoriaNome,
+        categoriaCor: catInfo.categoriaCor,
+        categoriaIcone: catInfo.categoriaIcone,
       }
     }
 
@@ -413,13 +482,17 @@ export class ListaComprasService {
     const dataInicio = new Date()
     dataInicio.setMonth(dataInicio.getMonth() - periodoMeses)
 
-    const notas = await this.notaFiscalModel
-      .find({
-        ...this.userFilter(userId),
-        cnpj,
-        dataEmissao: { $gte: dataInicio, $lte: dataFim },
-      })
-      .populate({ path: 'produtos', model: Produto.name })
+    const [notas, apelidos, prefixosOrdenados] = await Promise.all([
+      this.notaFiscalModel
+        .find({
+          ...this.userFilter(userId),
+          cnpj,
+          dataEmissao: { $gte: dataInicio, $lte: dataFim },
+        })
+        .populate({ path: 'produtos', model: Produto.name }),
+      this.produtoApelidoModel.find(this.userFilter(userId)),
+      this.carregarPrefixosOrdenadosUsuario(userId),
+    ])
 
     const produtosPlanos = notas.flatMap((nota) =>
       ((nota.produtos || []) as any[]).map((produto) => ({
@@ -437,9 +510,6 @@ export class ListaComprasService {
       grupos.get(nomeChave)!.push(item)
     }
 
-    const apelidos = await this.produtoApelidoModel.find(
-      this.userFilter(userId),
-    )
     const apelidoMap = new Map(
       apelidos.map((a) => [a.nomeOriginal.toUpperCase().trim(), a.apelido]),
     )
@@ -476,6 +546,11 @@ export class ListaComprasService {
 
       const nomeExibicao = apelidoMap.get(nomeChave) || maisRecente.nome
       const valorEstimado = Number((mediaQuantidade * valorUnitarioRecente).toFixed(2))
+      const catInfo = this.resolverCategoriaItem(
+        maisRecente.nome,
+        apelidoMap.get(nomeChave) || null,
+        prefixosOrdenados,
+      )
 
       itensFiltrados.push({
         nome: nomeExibicao,
@@ -484,6 +559,10 @@ export class ListaComprasService {
         nomeMercado: maisRecente.nome,
         origemMatch: 'RECORRENCIA',
         estabelecimentoOrigem: null,
+        categoriaCodigo: catInfo.categoriaCodigo,
+        categoriaNome: catInfo.categoriaNome,
+        categoriaCor: catInfo.categoriaCor,
+        categoriaIcone: catInfo.categoriaIcone,
         quantidade: mediaQuantidade,
         unidade: maisRecente.unidade,
         pesoEstimadoKg: isKg ? mediaQuantidade : undefined,
@@ -553,6 +632,30 @@ export class ListaComprasService {
   async obterLista(userId: string) {
     const lista = await this.listaComprasModel.findOne(this.userFilter(userId))
     if (!lista) throw new NotFoundException('Lista não encontrada')
+
+    // Enriquecer itens existentes caso não possuam categoria salva (compatibilidade retroativa)
+    if (
+      Array.isArray(lista.itens) &&
+      lista.itens.some((i) => !i.categoriaCodigo || !i.categoriaNome)
+    ) {
+      const prefixosOrdenados = await this.carregarPrefixosOrdenadosUsuario(
+        userId,
+      )
+      lista.itens.forEach((item) => {
+        if (!item.categoriaCodigo || !item.categoriaNome) {
+          const catInfo = this.resolverCategoriaItem(
+            item.nomeOriginal || item.nome,
+            item.termoFalado || item.nome,
+            prefixosOrdenados,
+          )
+          item.categoriaCodigo = catInfo.categoriaCodigo
+          item.categoriaNome = catInfo.categoriaNome
+          item.categoriaCor = catInfo.categoriaCor
+          item.categoriaIcone = catInfo.categoriaIcone
+        }
+      })
+    }
+
     return lista
   }
 
@@ -611,6 +714,14 @@ export class ListaComprasService {
 
   async adicionarItem(userId: string, dto: AdicionarItemDto) {
     const valorEstimado = dto.valorEstimado || 0
+    const prefixosOrdenados = await this.carregarPrefixosOrdenadosUsuario(
+      userId,
+    )
+    const catInfo = this.resolverCategoriaItem(
+      dto.nome,
+      dto.nome,
+      prefixosOrdenados,
+    )
 
     const newItem = {
       nome: dto.nome,
@@ -619,6 +730,10 @@ export class ListaComprasService {
       nomeMercado: null,
       origemMatch: 'MANUAL',
       estabelecimentoOrigem: null,
+      categoriaCodigo: catInfo.categoriaCodigo,
+      categoriaNome: catInfo.categoriaNome,
+      categoriaCor: catInfo.categoriaCor,
+      categoriaIcone: catInfo.categoriaIcone,
       quantidade: dto.quantidade,
       unidade: dto.unidade,
       valorEstimado,

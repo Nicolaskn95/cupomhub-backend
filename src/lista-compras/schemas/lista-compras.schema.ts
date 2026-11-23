@@ -31,6 +31,18 @@ export class ItemLista {
   @Prop({ type: String, default: null })
   estabelecimentoOrigem?: string | null
 
+  @Prop({ type: String, default: null })
+  categoriaCodigo?: string | null
+
+  @Prop({ type: String, default: null })
+  categoriaNome?: string | null
+
+  @Prop({ type: String, default: null })
+  categoriaCor?: string | null
+
+  @Prop({ type: String, default: null })
+  categoriaIcone?: string | null
+
   @Prop({ required: true })
   quantidade: number
 

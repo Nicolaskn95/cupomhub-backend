@@ -24,6 +24,14 @@ import {
   EstabelecimentoUsuario,
   EstabelecimentoUsuarioSchema,
 } from '../nota-fiscal/schemas/estabelecimento-usuario.schema'
+import {
+  Categoria,
+  CategoriaSchema,
+} from '../categoria/schemas/categoria.schema'
+import {
+  Prefixo,
+  PrefixoSchema,
+} from '../categoria/schemas/prefixo-categoria.schema'
 
 @Module({
   imports: [
@@ -37,6 +45,8 @@ import {
         name: EstabelecimentoUsuario.name,
         schema: EstabelecimentoUsuarioSchema,
       },
+      { name: Categoria.name, schema: CategoriaSchema },
+      { name: Prefixo.name, schema: PrefixoSchema },
     ]),
   ],
   controllers: [ListaComprasController],

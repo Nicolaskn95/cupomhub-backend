@@ -51,7 +51,7 @@ describe('VozPlnRagService', () => {
     ])
   })
 
-  it('deve vincular itens falados com o histórico do mercado via RAG (priorizando mercado selecionado, outro mercado e sem histórico)', async () => {
+  it('deve vincular itens falados com o histórico do mercado via RAG e atribuir a categoria correta a cada item', async () => {
     const itensFalados = [
       { termoFalado: 'Limoes', quantidade: 3, unidade: 'UN' },
       { termoFalado: 'Carne moida', quantidade: 1, unidade: 'KG' },
@@ -110,31 +110,41 @@ describe('VozPlnRagService', () => {
 
     expect(resultado).toHaveLength(5)
 
-    // 1. Limões -> LIMAO TAITI KG (Mercado Selecionado)
+    // 1. Limões -> LIMAO TAITI KG (Mercado Selecionado) - Categoria Frutas
     expect(resultado[0].termoFalado).toBe('Limoes')
     expect(resultado[0].nomeMercado).toBe('LIMAO TAITI KG')
     expect(resultado[0].origemMatch).toBe('MERCADO_SELECIONADO')
+    expect(resultado[0].categoriaCodigo).toBe('HORTIFRUTI_FRUTAS')
+    expect(resultado[0].categoriaNome).toBe('Frutas')
 
-    // 2. Carne moída -> CARNE MOIDA BOV PATINHO KG (Mercado Selecionado)
+    // 2. Carne moída -> CARNE MOIDA BOV PATINHO KG (Mercado Selecionado) - Categoria Açougue e Peixaria
     expect(resultado[1].termoFalado).toBe('Carne moida')
     expect(resultado[1].nomeMercado).toBe('CARNE MOIDA BOV PATINHO KG')
     expect(resultado[1].origemMatch).toBe('MERCADO_SELECIONADO')
     expect(resultado[1].valorEstimado).toBe(39.9)
+    expect(resultado[1].categoriaCodigo).toBe('ACOUGUE_E_PEIXARIA')
+    expect(resultado[1].categoriaNome).toBe('Açougue e Peixaria')
 
-    // 3. Azeite -> AZEITE OLIVA ANDORINHA VD 500ML (Outro Mercado)
+    // 3. Azeite -> AZEITE OLIVA ANDORINHA VD 500ML (Outro Mercado) - Categoria Mercearia Seca
     expect(resultado[2].termoFalado).toBe('Azeite')
     expect(resultado[2].nomeMercado).toBe('AZEITE OLIVA ANDORINHA VD 500ML')
     expect(resultado[2].origemMatch).toBe('OUTRO_MERCADO')
     expect(resultado[2].estabelecimentoOrigem).toBe('Tauste Supermercados')
+    expect(resultado[2].categoriaCodigo).toBe('MERCEARIA_SECA')
+    expect(resultado[2].categoriaNome).toBe('Mercearia Seca')
 
-    // 4. Macarrão penne -> MAC BARILLA OVOS PEN 500G (Mercado Selecionado, abreviação fiscal expandida)
+    // 4. Macarrão penne -> MAC BARILLA OVOS PEN 500G (Mercado Selecionado) - Categoria Mercearia Seca
     expect(resultado[3].termoFalado).toBe('Macarrao penne')
     expect(resultado[3].nomeMercado).toBe('MAC BARILLA OVOS PEN 500G')
     expect(resultado[3].origemMatch).toBe('MERCADO_SELECIONADO')
+    expect(resultado[3].categoriaCodigo).toBe('MERCEARIA_SECA')
+    expect(resultado[3].categoriaNome).toBe('Mercearia Seca')
 
-    // 5. Sal -> Sem histórico
+    // 5. Sal -> Sem histórico - Categoria Mercearia Seca
     expect(resultado[4].termoFalado).toBe('Sal')
     expect(resultado[4].nomeMercado).toBeNull()
     expect(resultado[4].origemMatch).toBe('SEM_HISTORICO')
+    expect(resultado[4].categoriaCodigo).toBe('MERCEARIA_SECA')
+    expect(resultado[4].categoriaNome).toBe('Mercearia Seca')
   })
 })

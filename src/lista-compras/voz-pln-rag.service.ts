@@ -12,6 +12,13 @@ export interface ItemExtraidoPln {
   unidade: string
 }
 
+export interface CategoriaItemInfo {
+  categoriaCodigo: string
+  categoriaNome: string
+  categoriaCor: string
+  categoriaIcone: string
+}
+
 export interface CandidatoHistoricoMercado {
   nomeOriginal: string
   nomeExibicao: string
@@ -22,6 +29,10 @@ export interface CandidatoHistoricoMercado {
   noMercadoSelecionado: boolean
   estabelecimento: string
   ultimaCompra: Date
+  categoriaCodigo?: string | null
+  categoriaNome?: string | null
+  categoriaCor?: string | null
+  categoriaIcone?: string | null
 }
 
 export interface ItemVinculadoRag {
@@ -31,6 +42,10 @@ export interface ItemVinculadoRag {
   nomeMercado: string | null
   origemMatch: 'MERCADO_SELECIONADO' | 'OUTRO_MERCADO' | 'SEM_HISTORICO'
   estabelecimentoOrigem: string | null
+  categoriaCodigo: string
+  categoriaNome: string
+  categoriaCor: string
+  categoriaIcone: string
   quantidade: number
   unidade: string
   pesoEstimadoKg?: number
@@ -39,6 +54,135 @@ export interface ItemVinculadoRag {
   frequencia: number
   comprado: boolean
 }
+
+export const CATALOGO_CATEGORIAS_SUPERMERCADO: Record<
+  string,
+  CategoriaItemInfo
+> = {
+  HORTIFRUTI_FRUTAS: {
+    categoriaCodigo: 'HORTIFRUTI_FRUTAS',
+    categoriaNome: 'Frutas',
+    categoriaCor: '#eab308',
+    categoriaIcone: 'Apple',
+  },
+  HORTIFRUTI_VERDURAS_E_LEGUMES: {
+    categoriaCodigo: 'HORTIFRUTI_VERDURAS_E_LEGUMES',
+    categoriaNome: 'Verduras e Legumes',
+    categoriaCor: '#22c55e',
+    categoriaIcone: 'leafy-green',
+  },
+  ACOUGUE_E_PEIXARIA: {
+    categoriaCodigo: 'ACOUGUE_E_PEIXARIA',
+    categoriaNome: 'Açougue e Peixaria',
+    categoriaCor: '#dc2626',
+    categoriaIcone: 'Beef',
+  },
+  LATICINIOS_E_OVOS: {
+    categoriaCodigo: 'LATICINIOS_E_OVOS',
+    categoriaNome: 'Laticínios e Ovos',
+    categoriaCor: '#0284c7',
+    categoriaIcone: 'Milk',
+  },
+  PADARIA_E_CONFEITARIA: {
+    categoriaCodigo: 'PADARIA_E_CONFEITARIA',
+    categoriaNome: 'Padaria e Confeitaria',
+    categoriaCor: '#92400e',
+    categoriaIcone: 'Croissant',
+  },
+  MERCEARIA_SECA: {
+    categoriaCodigo: 'MERCEARIA_SECA',
+    categoriaNome: 'Mercearia Seca',
+    categoriaCor: '#6d28d9',
+    categoriaIcone: 'Package',
+  },
+  CONGELADOS: {
+    categoriaCodigo: 'CONGELADOS',
+    categoriaNome: 'Congelados',
+    categoriaCor: '#3b82f6',
+    categoriaIcone: 'Snowflake',
+  },
+  BEBIDAS: {
+    categoriaCodigo: 'BEBIDAS',
+    categoriaNome: 'Bebidas',
+    categoriaCor: '#db2777',
+    categoriaIcone: 'Wine',
+  },
+  LIMPEZA: {
+    categoriaCodigo: 'LIMPEZA',
+    categoriaNome: 'Limpeza',
+    categoriaCor: '#06b6d4',
+    categoriaIcone: 'SprayCan',
+  },
+  HIGIENE_E_BELEZA: {
+    categoriaCodigo: 'HIGIENE_E_BELEZA',
+    categoriaNome: 'Higiene e Beleza',
+    categoriaCor: '#f472b6',
+    categoriaIcone: 'Sparkles',
+  },
+  PET_SHOP: {
+    categoriaCodigo: 'PET_SHOP',
+    categoriaNome: 'Pet Shop',
+    categoriaCor: '#f97316',
+    categoriaIcone: 'PawPrint',
+  },
+  UTILIDADES_DOMESTICAS: {
+    categoriaCodigo: 'UTILIDADES_DOMESTICAS',
+    categoriaNome: 'Utilidades Domésticas',
+    categoriaCor: '#475569',
+    categoriaIcone: 'Lamp',
+  },
+}
+
+const REGRAS_CATEGORIAS_REGEX: Array<[string, RegExp]> = [
+  [
+    'LIMPEZA',
+    /\b(detergente\w*|det\b|desinfetante\w*|des\b|lysoform|sabao|amaciante\w*|agua sanitaria|alvejante\w*|cloro|esponja\w*|scotch brite|bombril|ype|veja|limpador\w*|desengordurante\w*|multiuso|vassoura\w*|rodo\w*|saco\w* lixo|lustra|lixivia|inseticida\w*|guardanapo\w*|guard\b|papel toalha|toalha papel|lava roupas|lav r\b|omo|tixan|ariel|comfort|downy|brilhante)\b/i,
+  ],
+  [
+    'HIGIENE_E_BELEZA',
+    /\b(shampoo\w*|xampu\w*|shamp\b|condicionador\w*|cond\b|sabonete\w*|sab l\b|sab emb\b|sab\b|creme dental|pasta\w* dente\w*|escova\w* dente\w*|desodorante\w*|desod\b|absorvente\w*|cotonete\w*|hidratante\w*|perfume\w*|fio dental|papel higienico|fralda\w*|protetor solar|esmalte\w*|acetona|algodao|enxaguante|listerine|colgate|oral b|rexona|dove|nivea)\b/i,
+  ],
+  [
+    'PET_SHOP',
+    /\b(racao|racoes|petisco\w*|pet\b|pedigree|whiskas|golden|premier|areia\w* gato\w*|coleira\w*|cachorro\w*|caes|canin\w*|felin\w*|sach[eê]\w* gato|sach[eê]\w* cao)\b/i,
+  ],
+  [
+    'UTILIDADES_DOMESTICAS',
+    /\b(lampada\w*|pilha\w*|panela\w*|copo\w*|prato\w*|talher\w*|bateria\w*|utensilio\w*|bazar|filtro\w* de papel|filtro\w* papel|filtro\w* cafe|papel aluminio|filme pvc|plastico filme|fosforo\w*|isqueiro\w*|vela\w*|prendedor\w*|tupperware|pote\w* plastico)\b/i,
+  ],
+  [
+    'PADARIA_E_CONFEITARIA',
+    /\b(pao|paes|biscoito\w*|bisc\b|bolacha\w*|rosquinha\w*|rosq\b|bolo\w*|torta\w*|croissant\w*|baguete\w*|salgado\w*|coxinha\w*|empada\w*|pastel|pasteis|torrada\w*|panetone\w*|confeitaria|padaria|bisnaguinha\w*|sonho\w*|brioche\w*)\b/i,
+  ],
+  [
+    'CONGELADOS',
+    /\b(congelad\w*|cong\b|sorvete\w*|pizza\w*|lasanha\w*|nugget\w*|hamburguer\w*|steak\w*|batata cong\w*|polpa\w* de fruta\w*|acai|gelo|pao de queijo cong\w*)\b/i,
+  ],
+  [
+    'BEBIDAS',
+    /\b(refrigerante\w*|refr\b|refri\b|ref\b|schweppes|coca|coca-cola|pepsi|guarana\w*|fanta|sprite|suco\w*|nectar|cerveja\w*|chopp|vinho\w*|vodka|whisky|gin|energetico\w*|energ\b|baly|red bull|monster|tonica|cha\w*|ice|gatorade|h2oh|agua\w*(?! sanitaria)|espumante\w*|cachaca|aguardente|isotonic\w*)\b/i,
+  ],
+  [
+    'LATICINIOS_E_OVOS',
+    /\b(leite\w*|queijo\w*|qjo\b|mussarela|mucarela|parmesao|iogurte\w*|requeijao|req\b|manteiga|margarina|ovo\w*|nata|creme de leite|leite condensado|coalhada|ricota|gorgonzola|provolone|catupiry|chantilly|yakult|leite fermentado|danone|presunto\w*|mortadela\w*|peito de peru|salame\w*)\b/i,
+  ],
+  [
+    'MERCEARIA_SECA',
+    /\b(arroz|feijao|feijoes|macarrao|mac\b|massa\w*|espaguete|penne|parafuso|talharim|miojo|lamen|oleo\w*|azeite\w*|farinha\w*|biju|polvilho|fuba|acucar\w*|adocante\w*|cafe\w*|sal\b|molho\w*|extrato\w*|enlatado\w*|milho\w*|ervilha\w*|sardinha\w*|sard\b|atum|lentilha\w*|grao de bico|vinagre\w*|mol tom|ext tom|bat pa\b|batata palha|yoki|salsaretti|conserva\w*|maionese\w*|maion\b|ketchup|mostarda|canjica|sucrilhos|cereal|cereais|cer\b|aveia|granola|caldo\w*|sazon|knorr|maggi|sabor ami|curry|tempero\w*|temp\b|siamar|kitano|colorau|cominho|oregano|pimenta do reino|chocolate\w*|choc\b|ch\b|garoto|lacta|nestle|barra chocolate|bombom|bombons|achocolatado\w*|nescau|toddy|gelatina\w*|po gel\b|ervas finas|fermento|amido de milho|maizena|azeitona\w*|palmito\w*|pipoca|amendoim|castanha\w*|nozes|geleia\w*|mel\b|doce de leite|goiabada)\b/i,
+  ],
+  [
+    'ACOUGUE_E_PEIXARIA',
+    /\b(picanha|alcatra|contra\s*file|contrafile|maminha|costela\w*|frango\w*|fgo\b|coxa\w*|sobrecoxa\w*|peito de frango|asa de frango|carne\w*|bov\w*|suin\w*|peixe\w*|salmao|tilapia\w*|merluza|camarao|camaroes|linguica\w*|ling\b|salsicha\w*|bife\w*|acougue|bacon|pernil|mignon|file mignon|patinho|acem|musculo|cupim|paleta|pescado\w*|bacalhau|toscana|calabresa|miolo acem|file de frango|charque|carne seca|fraldinha|lagarto|figado|coracao de frango|moela|lombo)\b/i,
+  ],
+  [
+    'HORTIFRUTI_FRUTAS',
+    /\b(maca|macas|banana\w*|laranja\w*|uva\w*|morango\w*|abacaxi\w*|melancia\w*|melao|meloes|mamao|mamoes|limao|limoes|pera\w*|manga\w*|maracuja\w*|kiwi\w*|pessego\w*|goiaba\w*|tangerina\w*|mexerica\w*|ponkan|ameixa\w*|cereja\w*|abacate\w*|caqui\w*|figo\w*|jabuticaba\w*|acerola\w*|pitaya\w*|coco\w*|framboesa\w*|amora\w*|mirtilo\w*)\b/i,
+  ],
+  [
+    'HORTIFRUTI_VERDURAS_E_LEGUMES',
+    /\b(alface\w*|tomate\w*|cebola\w*|cebolinha\w*|batata\w*|cenoura\w*|alho\w*|pimentao|pimentoes|pimenta\w*|chuchu\w*|abobrinha\w*|abobora\w*|abob\b|couve\w*|brocolis|espinafre\w*|repolho\w*|mandioca\w*|mandioquinha\w*|aipim|macaxeira|rucula\w*|cheiro verde|hortalica\w*|coentro\w*|agriao|salsa|salsinha|manjericao|hortela|alecrim|acelga|escarola|chicoria|beterraba\w*|vagem|vagens|pepino\w*|berinjela\w*|quiabo\w*|jil[oó]\w*|inhame\w*|car[aá]\w*|rabanete\w*|nabo\w*|gengibre\w*|cogumelo\w*|champignon|shimeji|shitake|hidroponic\w*)\b/i,
+  ],
+]
 
 export const PESO_MEDIO_UNIDADE_KG: Record<string, number> = {
   tomate: 0.15,
@@ -170,7 +314,7 @@ const EXPANSOES_ABREVIACOES_FISCAIS: Array<[RegExp, string]> = [
   [/\bPAP\s+TOAL\w*\b|\bTOAL\s+PAP\w*\b/g, 'PAPEL TOALHA'],
   [/\bGUARD\w*\b/g, 'GUARDANAPO'],
   [/\bLING\b/g, 'LINGUICA'],
-  [/\bCALAB\w*\b/g, 'CALABresa'],
+  [/\bCALAB\w*\b/g, 'CALABRESA'],
   [/\bSARD\w*\b/g, 'SARDINHA'],
   [/\bMAION\w*\b/g, 'MAIONESE'],
 ]
@@ -219,6 +363,34 @@ export class VozPlnRagService {
       process.env.GEMINI_MODEL ||
       'gemini-3.5-flash-lite'
     ).trim()
+  }
+
+  /**
+   * Classifica um item da lista de compras em uma das 12 categorias de corredor de supermercado
+   * usando tanto o termo falado quanto o nome original fiscal do produto.
+   */
+  classificarCategoriaItem(
+    termoFalado?: string | null,
+    nomeOriginal?: string | null,
+  ): CategoriaItemInfo {
+    const textosParaTestar = [
+      termoFalado ? this.expandirTextoFiscal(termoFalado) : '',
+      nomeOriginal ? this.expandirTextoFiscal(nomeOriginal) : '',
+    ].filter(Boolean)
+
+    for (const texto of textosParaTestar) {
+      const normalizado = removerAcentos(texto.toLowerCase())
+      for (const [codigo, regex] of REGRAS_CATEGORIAS_REGEX) {
+        if (regex.test(normalizado)) {
+          return (
+            CATALOGO_CATEGORIAS_SUPERMERCADO[codigo] ||
+            CATALOGO_CATEGORIAS_SUPERMERCADO.MERCEARIA_SECA
+          )
+        }
+      }
+    }
+
+    return CATALOGO_CATEGORIAS_SUPERMERCADO.MERCEARIA_SECA
   }
 
   /**
@@ -967,6 +1139,11 @@ Regras:
           valorEstimado = Number((item.quantidade * valorUnitario).toFixed(2))
         }
 
+        const catAuto = this.classificarCategoriaItem(
+          item.termoFalado,
+          escolhido.nomeOriginal,
+        )
+
         return {
           nome: item.termoFalado,
           nomeOriginal: escolhido.nomeOriginal,
@@ -978,6 +1155,11 @@ Regras:
           estabelecimentoOrigem: escolhido.noMercadoSelecionado
             ? null
             : escolhido.estabelecimento,
+          categoriaCodigo:
+            escolhido.categoriaCodigo || catAuto.categoriaCodigo,
+          categoriaNome: escolhido.categoriaNome || catAuto.categoriaNome,
+          categoriaCor: escolhido.categoriaCor || catAuto.categoriaCor,
+          categoriaIcone: escolhido.categoriaIcone || catAuto.categoriaIcone,
           quantidade: item.quantidade,
           unidade: item.unidade || escolhido.unidade || 'UN',
           pesoEstimadoKg,
@@ -989,6 +1171,8 @@ Regras:
       }
 
       // Caso não tenha histórico em nenhum mercado
+      const catSemHist = this.classificarCategoriaItem(item.termoFalado, null)
+
       return {
         nome: item.termoFalado,
         nomeOriginal: item.termoFalado.toUpperCase(),
@@ -996,6 +1180,10 @@ Regras:
         nomeMercado: null,
         origemMatch: 'SEM_HISTORICO',
         estabelecimentoOrigem: null,
+        categoriaCodigo: catSemHist.categoriaCodigo,
+        categoriaNome: catSemHist.categoriaNome,
+        categoriaCor: catSemHist.categoriaCor,
+        categoriaIcone: catSemHist.categoriaIcone,
         quantidade: item.quantidade,
         unidade: item.unidade || 'UN',
         valorUnitarioRecente: 0,
